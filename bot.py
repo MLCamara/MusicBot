@@ -22,7 +22,7 @@ playlist_opts = {'format': 'bestaudio'}
 
 # FFmpeg options for reconnecting to streams and setting audio volume
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                  'options': '-vn -filter:a "volume=0.70"'}
+                  'options': '-vn -filter:a "volume=0.50"'}
 
 tracklist = Queue()
 
@@ -50,10 +50,15 @@ async def play(ctx: context):
         else:
             await ctx.send("**You need to be in a voice channel to use this command!**")
             return
+    elif voice_client.channel != ctx.author.voice.channel:
+        await voice_client.disconnect()
+        await ctx.author.voice.channel.connect()
 
     # Extract the track name from the message content
     msg: str = ctx.message.content
     track_name = msg.replace('!play', '').strip().replace(' ', '+')
+
+    await asyncio.sleep(0.125) #sleeps for 125 millisecond to allow time to connect
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
@@ -66,8 +71,11 @@ async def play(ctx: context):
             title = info['title']  # Title of the track
 
             # Stop any currently playing audio and play the new track
-            ctx.voice_client.stop()
+            if ctx.voice_client.is_playing() or ctx.voice_client.is_paused():
+                ctx.voice_client.stop()
+
             source = FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
+            await asyncio.sleep(0.125)  # sleeps for 125 millisecond to allow time to connect
             ctx.voice_client.play(source)
             await ctx.send(f"***Now playing:\n {title}***")
         except Exception as e:
@@ -86,7 +94,7 @@ async def pause(ctx: context):
     voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
     if voice_client:
         if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
-            ctx.voice_client.pause()
+            voice_client.pause()
             await ctx.send("***Bot is paused.***")
         else:
             await ctx.send("**You need to be in the same voice channel to use this command!**")
@@ -119,8 +127,8 @@ async def leave(ctx: context):
     voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
     if voice_client:
         if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
-            await ctx.voice_client.disconnect()
-            await ctx.send("***Bot is disconnected.***")
+            await voice_client.disconnect()
+            await ctx.send("***Bot Gooned to Death.***")
         else:
             await ctx.send("**You need to be in the same voice channel to use this command!**")
     else:
