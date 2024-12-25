@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 import yt_dlp as youtube_dl
 import asyncio
+from queue import Queue
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -23,9 +24,12 @@ playlist_opts = {'format': 'bestaudio'}
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
                   'options': '-vn -filter:a "volume=0.70"'}
 
+tracklist = Queue()
+
 # Create bot with specified intents
 intents = discord.Intents.default()
 intents.message_content = True
+intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -38,7 +42,9 @@ async def play(ctx: context):
         ctx (context): The command context, including message and author information.
     """
     # Ensure the bot is in a voice channel
-    if not ctx.voice_client:
+    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
+    if not voice_client:
         if ctx.author.voice:
             await ctx.author.voice.channel.connect()
         else:
@@ -77,12 +83,13 @@ async def pause(ctx: context):
     Args:
         ctx (context): The command context, including message and author information.
     """
-    if ctx.voice_client:
-        if ctx.author.voice:
+    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
+    if voice_client:
+        if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
             ctx.voice_client.pause()
             await ctx.send("***Bot is paused.***")
         else:
-            await ctx.send("**You need to be in a voice channel to use this command!**")
+            await ctx.send("**You need to be in the same voice channel to use this command!**")
     else:
         await ctx.send("**I am not connected to a voice channel.**")
 
@@ -95,25 +102,31 @@ async def resume(ctx: context):
     Args:
         ctx (context): The command context, including message and author information.
     """
-    if ctx.voice_client:
-        if ctx.author.voice:
-            ctx.voice_client.resume()
+
+    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
+    if voice_client:
+        if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
+            voice_client.resume()
             await ctx.send("**Bot is resumed.**")
         else:
-            await ctx.send("**You need to be in a voice channel to use this command!**")
+            await ctx.send("**You need to be in the same voice channel to use this command!**")
     else:
         await ctx.send("**I am not connected to a voice channel.**")
 
 
 @bot.command(name='goon')
 async def leave(ctx: context):
-    if ctx.voice_client:
-        if ctx.author.voice:
+    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
+    if voice_client:
+        if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
             await ctx.voice_client.disconnect()
             await ctx.send("***Bot is disconnected.***")
         else:
-            await ctx.send("**You need to be in a voice channel to use this command!**")
+            await ctx.send("**You need to be in the same voice channel to use this command!**")
     else:
         await ctx.send("**I am not connected to a voice channel.**")
+
+
+
 # Run the bot with the token from the .env file
 bot.run(discord_token)
