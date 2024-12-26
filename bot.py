@@ -163,9 +163,17 @@ async def next(ctx: context):
             for e in list(tracklist.queue):
                 print(e)
             print('END OF QUEUE\n')
+            voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+            if voice_client and voice_client.channel == ctx.author.voice.channel:
+                if not voice_client.is_playing():
+                    ctx.voice_client.play(source,
+                                          after=lambda error: asyncio.run_coroutine_threadsafe(
+                                              my_after(error=error, ctx=ctx), bot.loop).result())
+                    await ctx.send(f"***Now playing from queue:\n {title}***")
         except Exception as e:
             # Handle errors (e.g., track not found)
             await ctx.send("**Could not Find Track.**")
+
 
 
 async def my_after(error, ctx):
@@ -198,13 +206,27 @@ async def my_after(error, ctx):
             voice_client.play(source, after=partial(after_playback))
 
             # Notify the user about the next track
-            await ctx.send(f"***Now playing:\n {title}***")
+            await ctx.send(f"***Now playing from queue:\n {title}***")
         else:
             await ctx.send("**You need to be in a voice channel to use this command!**")
     else:
         # Notify that the queue is empty
         await ctx.send("**The queue is empty. Add more tracks to keep the party going!**")
 
+@bot.command(name='list')
+async def list(ctx: context):
+    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if voice_client:
+        if not tracklist.empty():
+            i = 1
+            for _ in range(tracklist.qsize()):
+                data = tracklist.get()
+                await ctx.send(f"***{i}. {data['title']}***")  # Process the dictionary
+                i += 1
+                tracklist.put(data)  # Put the dictionary back in the queue
+        await ctx.send('**No tracks in Queue**')
+    else:
+        await ctx.send('**I am not connected to a voice channel.**')
 
 # Run the bot with the token from the .env file
 bot.run(discord_token)
