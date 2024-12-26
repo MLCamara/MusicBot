@@ -152,17 +152,16 @@ async def next(ctx: context):
             info = await loop.run_in_executor(
                 None, lambda: ydl.extract_info(f"ytsearch:{track_name}", download=False)['entries'][0]
             )
+
             title = info['title']  # Title of the track
             song = info['url']
             await asyncio.sleep(0.125)
             source = FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
             data = {'title': title, 'source': source}
             tracklist.put(data)
+
             await ctx.send(f"***Added to queue\n {title}***")
-            print('\nSTART OF QUEUE:')
-            for e in list(tracklist.queue):
-                print(e)
-            print('END OF QUEUE\n')
+
             voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
             if voice_client and voice_client.channel == ctx.author.voice.channel:
                 if not voice_client.is_playing():
@@ -170,6 +169,8 @@ async def next(ctx: context):
                                           after=lambda error: asyncio.run_coroutine_threadsafe(
                                               my_after(error=error, ctx=ctx), bot.loop).result())
                     await ctx.send(f"***Now playing from queue:\n {title}***")
+            else:
+                await ctx.send("**You must be in the same voice channel to use this command!")
         except Exception as e:
             # Handle errors (e.g., track not found)
             await ctx.send("**Could not Find Track.**")
@@ -224,7 +225,8 @@ async def list(ctx: context):
                 await ctx.send(f"***{i}. {data['title']}***")  # Process the dictionary
                 i += 1
                 tracklist.put(data)  # Put the dictionary back in the queue
-        await ctx.send('**No tracks in Queue**')
+        else:
+            await ctx.send('**No tracks in Queue**')
     else:
         await ctx.send('**I am not connected to a voice channel.**')
 
