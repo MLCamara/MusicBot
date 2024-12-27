@@ -25,7 +25,8 @@ playlist_opts = {'format': 'bestaudio'}
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
                   'options': '-vn -filter:a "volume=0.50"'}
 
-tracklist = Queue()
+tracklist = Queue() #queue used for queing tracks
+guilds_tracklist = {} #dict of guilds (key) and tracklist (value) to keep note of the guild's queues
 
 # Create bot with specified intents
 intents = discord.Intents.default()
@@ -78,9 +79,10 @@ async def play(ctx: context):
             source = FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
 
             await asyncio.sleep(0.125)  # sleeps for 125 millisecond to allow time to connect
+            #loop = asyncio.get_event_loop()
             ctx.voice_client.play(source,
                                   after=lambda error: asyncio.run_coroutine_threadsafe(my_after(error=error, ctx=ctx),bot.loop).result())
-            await ctx.send(f"***Now playing:\n {title}***")
+            await ctx.send(f"\n***Now playing:\n {title}***\n")
         except Exception as e:
             # Handle errors (e.g., track not found)
             print(e)
@@ -160,15 +162,16 @@ async def next(ctx: context):
             data = {'title': title, 'source': source}
             tracklist.put(data)
 
-            await ctx.send(f"***Added to queue\n {title}***")
+            await ctx.send(f"\n***Added to queue:\n {title}***\n")
 
             voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
             if voice_client and voice_client.channel == ctx.author.voice.channel:
                 if not voice_client.is_playing():
+                    #loop = asyncio.get_event_loop()
                     ctx.voice_client.play(source,
                                           after=lambda error: asyncio.run_coroutine_threadsafe(
                                               my_after(error=error, ctx=ctx), bot.loop).result())
-                    await ctx.send(f"***Now playing from queue:\n {title}***")
+                    await ctx.send(f"\n***Now playing from queue:\n {title}***\n")
             else:
                 await ctx.send("**You must be in the same voice channel to use this command!")
         except Exception as e:
@@ -199,17 +202,15 @@ async def my_after(error, ctx):
         # Get the voice client
         voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
-        if voice_client and voice_client.is_connected():
-            # Play the next track
+        if voice_client:
+                # Play the next track
             def after_playback(err):
-                asyncio.run_coroutine_threadsafe(my_after(err, ctx), bot.loop)
-
+                asyncio.run_coroutine_threadsafe(my_after(err, ctx),bot.loop)
+            # loop = asyncio.get_event_loop()
             voice_client.play(source, after=partial(after_playback))
 
-            # Notify the user about the next track
-            await ctx.send(f"***Now playing from queue:\n {title}***")
-        else:
-            await ctx.send("**You need to be in a voice channel to use this command!**")
+                # Notify the user about the next track
+            await ctx.send(f"\n***Now playing from queue:\n {title}***\n")
     else:
         # Notify that the queue is empty
         await ctx.send("**The queue is empty. Add more tracks to keep the party going!**")
@@ -229,6 +230,31 @@ async def list(ctx: context):
             await ctx.send('**No tracks in Queue**')
     else:
         await ctx.send('**I am not connected to a voice channel.**')
+
+@bot.command(name='skip')
+async def skip(ctx: context):
+    voice: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
+    if voice: #is the bot connected to a voice channel
+        if ctx.author.voice and ctx.author.voice.channel == voice.channel: #is bot and author in the same voice channel
+            if voice.is_playing(): #is it playing
+                voice.stop() #stops the currently playing track
+                await ctx.send("***Skipped!***")
+                if not tracklist.empty(): #is the queue not empty
+                    data = tracklist.get()
+                    source = data['source']
+                    title = data['title']
+                    # loop = asyncio.get_event_loop()
+                    ctx.voice_client.play(source,
+                                          after=lambda error: asyncio.run_coroutine_threadsafe(
+                                              my_after(error=error, ctx=ctx),bot.loop).result())
+                    await ctx.send(f"\n***Now playing from queue:\n {title}***\n")
+                else: #queue is empty
+                    await ctx.send("**The queue is empty. Add more tracks to keep the party going!**")
+        else: #author is not in the same voice channel or is not in a voice channel at all
+            await ctx.send("**You need to be in the same voice channel to use this command!**")
+    else:#bot is not connected to a voice channel
+        await ctx.send("**I am not connected to a voice channel.**")
 
 # Run the bot with the token from the .env file
 bot.run(discord_token)
