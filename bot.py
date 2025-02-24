@@ -65,33 +65,28 @@ async def play(ctx: context):
     msg: str = ctx.message.content
     track_name = msg.replace('!play', '').strip().replace(' ', '+')
 
-    # asyncio.sleep(0.125) #sleeps for 125 millisecond to allow time to connect
+    data = await download(track_name, ctx)
+    try:
 
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Fetch track information asynchronously
-            loop = asyncio.get_event_loop()
-            info = await loop.run_in_executor(
-                None, lambda: ydl.extract_info(f"ytsearch:{track_name}", download=False)['entries'][0]
-            )
-            song = info['url']  # URL for streaming
-            title = info['title']  # Title of the track
-            orginal_url = info['original_url']
-            embed = embedded(orginal_url, title)
-            # Stop any currently playing audio and play the new track
-            if ctx.voice_client.is_playing() or ctx.voice_client.is_paused():
-                voice_client.stop()
+        source = data['source']
+    except Exception as e:
+        print(e)
+        print('Source not donwloaded successfully')
+        return
 
-            source = FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
+    source = data['source']
+    title = data['title']
+    source = data['source']
+    url = data['url']
+    image = data['image']
+    embed = embedded(url,title,image)
+    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
-            ctx.voice_client.play(source,
-                                  after=lambda error: asyncio.run_coroutine_threadsafe(my_after(error=error, ctx=ctx),bot.loop).result())
-            await ctx.send(f"\n***Now playing:\n {title}***\n")
-            await ctx.send(embed=embed)
-        except Exception as e:
-            # Handle errors (e.g., track not found)
-            print(e)
-            await ctx.send("**Could not Find Track.**")
+    if voice_client.is_playing():
+        voice_client.stop()
+
+    ctx.voice_client.play(source, after=lambda e:  after_playback(ctx=ctx))
+    await ctx.send(f"***Now playing:***\n  ", embed=embed)
 
 @bot.command(name='pause')
 async def pause(ctx: context):
@@ -126,6 +121,7 @@ async def resume(ctx: context):
     if voice_client:
         if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
             voice_client.resume()
+            print('Bot is resumed')
             await ctx.send("**Bot is resumed.**")
         else:
             await ctx.send("**You need to be in the same voice channel to use this command!**")
@@ -154,45 +150,40 @@ async def next(ctx: context):
     track_name = msg.replace('!next', '').strip().replace(' ', '+')
 
     voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
     if not voice_client:
         await ctx.send("**I am not connected to a voice channel.**")
         return
+
     if voice_client.channel != ctx.author.voice.channel:
         await ctx.send("**You must be in the same voice channel to use this command!")
         return
 
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Fetch track information asynchronously
-            loop = asyncio.get_event_loop()
-            info = await loop.run_in_executor(
-                None, lambda: ydl.extract_info(f"ytsearch:{track_name}", download=False)['entries'][0]
-            )
+    data = await download(track_name, ctx=ctx)
+    tracklist: Queue = guilds_tracklist.get(ctx.guild)
 
-            title = info['title']  # Title of the track
-            song = info['url'] #url of audio
-            source = FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
-            data = {'title': title, 'source': source}
-            tracklist: Queue = guilds_tracklist.get(ctx.guild)
-            tracklist.put(data)
-            guilds_tracklist[ctx.guild] = tracklist
+    source = data['source']
+    title = data['title']
+    url = data['url']
+    image = data['image']
 
-            await ctx.send(f"\n***Added to queue:\n {title}***\n")
-
-            if not voice_client.is_playing():
-                ctx.voice_client.play(source,
-                                        after=lambda error: asyncio.run_coroutine_threadsafe(
-                                            my_after(error=error, ctx=ctx), bot.loop).result())
-                await ctx.send(f"\n***Now playing from queue:\n {title}***\n")
-                url = info['original_url']
-                embed = embedded(url,title)
-                await ctx.send(embed=embed)
-                guilds_tracklist[ctx.guild] = Queue()
-        except Exception as e:
-            # Handle errors (e.g., track not found)
-            await ctx.send("**Could not Find Track.**")
+    tracklist.put(data)
+    guilds_tracklist[ctx.guild] = tracklist
+    embed = embedded(url, title, image)
+    await ctx.send(f"***Added to queue:***\n  ", embed=embed)
+    print(f"{data}\n Added to Queue, {ctx.guild}")
 
 
+    if not voice_client.is_playing():
+        ctx.voice_client.play(source,after=lambda e: after_playback(ctx=ctx))
+        await ctx.send(f"\n***Now playing from queue:***\n  ", embed=embed)
+        guilds_tracklist[ctx.guild] = Queue()
+
+
+
+    #Function safely plays next track in a new thread
+async def after_playback(ctx, err= None):
+    asyncio.run_coroutine_threadsafe(my_after(ctx=ctx),bot.loop)
 
 async def my_after(error, ctx):
     """
@@ -202,10 +193,6 @@ async def my_after(error, ctx):
         error (Exception): Playback error, if any.
         ctx (context): The command context to send messages and manage playback.
     """
-    if error:
-        print(f"Playback error: {error}")
-        return  # Stop further processing if there's an error
-
     playlist = guilds_tracklist.get(ctx.guild)
     # Check if there are more tracks in the queue
     if not playlist.empty():
@@ -213,20 +200,20 @@ async def my_after(error, ctx):
         data = playlist.get()
         title = data['title']
         source = data['source']
+        url = data['url']
+        image = data['image']
 
         # Get the voice client
         voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
         if voice_client:
-                # Play the next track
-            def after_playback(err):
-                asyncio.run_coroutine_threadsafe(my_after(err, ctx),bot.loop)
-            # loop = asyncio.get_event_loop()
-            voice_client.play(source, after=partial(after_playback))
-
-                # Notify the user about the next track
-            await ctx.send(f"\n***Now playing from queue:\n {title}***\n")
+            voice_client.play(source, after=lambda e: after_playback(ctx=ctx))
+            embed = embedded(url, title, image)
+            # Notify the user about the next track
+            await ctx.send(f"\n***Now playing from queue:***\n", embed = embed)
             guilds_tracklist[ctx.guild] = playlist
+        else:
+            await ctx.send("I am not connected to a voice channel.")
     else:
         # Notify that the queue is empty
         await ctx.send("**The queue is empty. Add more tracks to keep the party going!**")
@@ -255,18 +242,23 @@ async def skip(ctx: context):
     if voice: #is the bot connected to a voice channel
         if ctx.author.voice and ctx.author.voice.channel == voice.channel: #is bot and author in the same voice channel
             if voice.is_playing(): #is it playing
+
                 voice.stop() #stops the currently playing track
                 await ctx.send("***Skipped!***")
+                print(f'song skipped, {ctx.guild}')
                 playlist = guilds_tracklist.get(ctx.guild)
                 if not playlist.empty(): #is the queue not empty
+
                     data = playlist.get()
                     source = data['source']
                     title = data['title']
-                    ctx.voice_client.play(source,
-                                          after=lambda error: asyncio.run_coroutine_threadsafe(
-                                              my_after(error=error, ctx=ctx),bot.loop).result())
-                    await ctx.send(f"\n***Now playing from queue:\n {title}***\n")
+                    url = data['url']
+                    image = data['image']
+                    ctx.voice_client.play(source,after=lambda e: after_playback(ctx=ctx))
+                    embed = embedded(url,title,image)
+                    await ctx.send(f"\n***Now playing from queue:***\n",embed = embed)
                     guilds_tracklist[ctx.guild] = playlist
+
             elif not playlist.empty(): #queue is empty
                 await ctx.send("**The queue is empty. Add more tracks to keep the party going!**")
         else: #author is not in the same voice channel or is not in a voice channel at all
@@ -274,10 +266,33 @@ async def skip(ctx: context):
     else:#bot is not connected to a voice channel
         await ctx.send("**I am not connected to a voice channel.**")
 
-def embedded(url, vid_title):
-    embed = discord.Embed(title=vid_title, description="Click to watch", color=discord.Color.blue())
+def embedded(url: str, vid_title: str, thumbnail: str):
+    embed = discord.Embed(title=vid_title, description="Click to watch", color=discord.Color.dark_red(), url = url)
+    embed.set_thumbnail(url=thumbnail)
     embed.add_field(name="Video", value=url, inline=False)
     return embed
+
+async def download(trackname: str, ctx: context):
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        try:
+            # Fetch track information asynchronously
+            loop = asyncio.get_event_loop()
+            info = await loop.run_in_executor(
+                None, lambda: ydl.extract_info(f"ytsearch:{trackname}", download=False)['entries'][0]
+            )
+
+            title = info['title']  # Title of the track
+            song = info['url']  # url of audio
+            url = info['original_url']
+            image = info['thumbnail']
+            source = FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
+            data = {'title': title, 'source': source, 'url': url, 'image': image}
+            return data
+        except Exception as e:
+            # Handle errors (e.g., track not found)
+            print(e)
+            await ctx.send("**Could not Find Track.**")
+
 
 # Run the bot with the token from the .env file
 bot.run(discord_token)
