@@ -18,6 +18,7 @@ from queue import Queue
 load_dotenv()
 discord_token = os.getenv('token')
 icon = os.getenv('icon')
+ig = os.getenv('ig')
 
 # Options for youtube_dl to fetch the best audio and avoid playlists
 ydl_opts = {'format': 'bestaudio', 'noplaylist': 'True'}
@@ -299,23 +300,47 @@ async def download(trackname: str, ctx: context):
             print(e)
             await ctx.send("**Could not Find Track.**")
 
-@bot.command(name='help')
-async def help_command(ctx):
+def embed_help():
     embed = discord.Embed(
         title="**COMMANDS**",
         description="Here are the commands you can use:",
         color=discord.Color.dark_red()
     )
     embed.add_field(name="**!help**", value="list all commands", inline=False)
-    embed.add_field(name="**!play**", value="plays track", inline=False)
-    embed.add_field(name="**!next**", value="queues track.", inline=False)
+    embed.add_field(name="**!play**", value="play track", inline=False)
+    embed.add_field(name="**!next**", value="queue track", inline=False)
     embed.add_field(name="**!p**", value="Play/Pause", inline=False)
-    embed.add_field(name="**!skip**", value="skips the current track ", inline=False)
-    embed.add_field(name="**!list**", value="Shows all tracks in the queue", inline=False)
-    embed.add_field(name="**!goon**", value="bot goons to death and disconnects from vc ", inline=False)
-    embed.set_footer(text="Enjoy your music! 🎵\n **Created by Mohamed Camara\n IG: @stackedmc_**", icon_url=icon)
+    embed.add_field(name="**!skip**", value="skip the current track", inline=False)
+    embed.add_field(name="**!list**", value="Show all tracks in the queue", inline=False)
+    embed.add_field(name="**!goon**", value="bot goons to death and disconnects from vc", inline=False)
+    embed.set_footer(text="Enjoy your music! 🎵\nIG: @stackedmc_")
+    embed.set_author(name='Mohamed Camara', url=ig, icon_url=icon)
+    return embed
 
+@bot.command(name='help')
+async def help_command(ctx):
+    embed = embed_help()
     await ctx.send(embed=embed)
+
+@bot.event
+async def on_ready():
+    print(f'Bot is ready. Logged in as {bot.user}')
+    embed = embed_help()
+
+    for guild in bot.guilds:
+        # Try to find a system channel or the first text channel with send permissions
+        channel = guild.system_channel
+        if channel is None:
+            for text_channel in guild.text_channels:
+                if text_channel.permissions_for(guild.me).send_messages:
+                    channel = text_channel
+                    break
+
+        if channel:
+            try:
+                await channel.send("**Music Player is Ready**", embed=embed)
+            except Exception as e:
+                print(f"Failed to send message in {guild.name}: {e}")
 
 # Run the bot with the token from the .env file
 bot.run(discord_token)
