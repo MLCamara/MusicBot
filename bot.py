@@ -17,6 +17,7 @@ from queue import Queue
 # Load environment variables from a .env file
 load_dotenv()
 discord_token = os.getenv('token')
+icon = os.getenv('icon')
 
 # Options for youtube_dl to fetch the best audio and avoid playlists
 ydl_opts = {'format': 'bestaudio', 'noplaylist': 'True'}
@@ -34,7 +35,7 @@ guilds_tracklist = {} #dict of guilds (key) and tracklist (value) to keep note o
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", help_command=None, intents=intents)
 
 
 @bot.command(name="play")
@@ -108,7 +109,7 @@ async def pause(ctx: context):
         await ctx.send("**I am not connected to a voice channel.**")
 
 
-@bot.command(name='resume')
+@bot.command(name='p')
 async def resume(ctx: context):
     """
     Resumes the currently paused audio.
@@ -120,9 +121,14 @@ async def resume(ctx: context):
     voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
     if voice_client:
         if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
-            voice_client.resume()
-            print('Bot is resumed')
-            await ctx.send("**Bot is resumed.**")
+            if voice_client.is_playing():
+                voice_client.pause()
+                print('Bot is paused.')
+                await ctx.send("**Bot is paused.**")
+            else:
+                voice_client.resume()
+                print('Bot is resumed.')
+                await ctx.send("**Bot is resumed.**")
         else:
             await ctx.send("**You need to be in the same voice channel to use this command!**")
     else:
@@ -293,6 +299,23 @@ async def download(trackname: str, ctx: context):
             print(e)
             await ctx.send("**Could not Find Track.**")
 
+@bot.command(name='help')
+async def help_command(ctx):
+    embed = discord.Embed(
+        title="**COMMANDS**",
+        description="Here are the commands you can use:",
+        color=discord.Color.dark_red()
+    )
+    embed.add_field(name="**!help**", value="list all commands", inline=False)
+    embed.add_field(name="**!play**", value="plays track", inline=False)
+    embed.add_field(name="**!next**", value="queues track.", inline=False)
+    embed.add_field(name="**!p**", value="Play/Pause", inline=False)
+    embed.add_field(name="**!skip**", value="skips the current track ", inline=False)
+    embed.add_field(name="**!list**", value="Shows all tracks in the queue", inline=False)
+    embed.add_field(name="**!goon**", value="bot goons to death and disconnects from vc ", inline=False)
+    embed.set_footer(text="Enjoy your music! 🎵\n **Created by Mohamed Camara\n IG: @stackedmc_**", icon_url=icon)
+
+    await ctx.send(embed=embed)
 
 # Run the bot with the token from the .env file
 bot.run(discord_token)
