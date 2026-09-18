@@ -10,7 +10,6 @@ import os
 from dotenv import load_dotenv
 import yt_dlp as youtube_dl
 import asyncio
-import requests
 
 from queue import Queue
 
@@ -27,7 +26,7 @@ playlist_opts = {'format': 'bestaudio'}
 
 # FFmpeg options for reconnecting to streams and setting audio volume
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                  'options': '-vn -filter:a "volume=0.50"'}
+                  'options': '-vn -filter:a "volume=0.25"'}
 
 
 guilds_tracklist = {} #dict of guilds (key) and tracklist (value) to keep note of the guild's queues
@@ -90,26 +89,6 @@ async def play(ctx: context):
     ctx.voice_client.play(source, after=lambda e:  after_playback(ctx=ctx))
     await ctx.send(f"***Now playing:***\n  ", embed=embed)
 
-@bot.command(name='pause')
-async def pause(ctx: context):
-    """
-    Pauses the currently playing audio.
-
-    Args:
-        ctx (context): The command context, including message and author information.
-    """
-    voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
-    if voice_client:
-        if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
-            voice_client.pause()
-            await ctx.send("***Bot is paused.***")
-            print('\nBot paused\n')
-        else:
-            await ctx.send("**You need to be in the same voice channel to use this command!**")
-    else:
-        await ctx.send("**I am not connected to a voice channel.**")
-
-
 @bot.command(name='p')
 async def resume(ctx: context):
     """
@@ -136,15 +115,15 @@ async def resume(ctx: context):
         await ctx.send("**I am not connected to a voice channel.**")
 
 
-@bot.command(name='goon')
+@bot.command(name='stop')
 async def leave(ctx: context):
     voice_client: discord.VoiceClient = discord.utils.get(bot.voice_clients,guild=ctx.guild)
     if voice_client:
         if ctx.author.voice and ctx.author.voice.channel == voice_client.channel:
             guilds_tracklist.pop(ctx.guild)
             await voice_client.disconnect()
-            await ctx.send("***Bot Gooned to Death.***")
-            print('\nBot Gooned to Death\n')
+            await ctx.send("***Bot Left.***")
+            print('\nBot left\n')
         else:
             await ctx.send("**You need to be in the same voice channel to use this command!**")
     else:
@@ -307,14 +286,13 @@ def embed_help():
         color=discord.Color.dark_red()
     )
     embed.add_field(name="**!help**", value="list all commands", inline=False)
-    embed.add_field(name="**!play**", value="play track", inline=False)
-    embed.add_field(name="**!next**", value="queue track", inline=False)
     embed.add_field(name="**!p**", value="Play/Pause", inline=False)
+    embed.add_field(name="**!next**", value="queue track", inline=False)
     embed.add_field(name="**!skip**", value="skip the current track", inline=False)
     embed.add_field(name="**!list**", value="Show all tracks in the queue", inline=False)
-    embed.add_field(name="**!goon**", value="bot goons to death and disconnects from vc", inline=False)
+    embed.add_field(name="**!stop**", value="bot stops and disconnects from vc", inline=False)
     embed.set_footer(text="Enjoy your music! 🎵\nIG: @stackedmc_")
-    embed.set_author(name='Mohamed Camara', url=ig, icon_url=icon)
+    embed.set_author(name='Mo⚡️', url=ig, icon_url=icon)
     return embed
 
 @bot.command(name='help')
